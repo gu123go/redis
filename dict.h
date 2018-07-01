@@ -75,7 +75,7 @@ typedef struct dictType {
 typedef struct dictht {
     dictEntry **table;
     unsigned long size;
-    unsigned long sizemask;
+    unsigned long sizemask;     //大小等于size-1，
     unsigned long used;
 } dictht;
 
@@ -83,6 +83,7 @@ typedef struct dict {
     dictType *type;
     void *privdata;
     dictht ht[2];
+	//记录当前重哈希哪个桶，为了防止重哈希过程中阻塞线程，每次只处理少量。
     long rehashidx; /* rehashing not in progress if rehashidx == -1 */
     int iterators; /* number of iterators currently running */
 } dict;
@@ -162,34 +163,80 @@ int dictExpand(dict *d, unsigned long size);
 //哈希表中添加一个元素
 //调用dictAddRaw，_dictRehashStep如果重哈希，则单步重哈希；
 //在_dictKeyIndex中，如果需要初始化/扩大哈希表，则扩大/初始化；然后通过key计算哈希，并判断是否已经存在（可能判断两个哈希表）
-//如果设置了rehashidx，优先使用ht[1]；构建entry，dictSetKey
-//如果构建entry成功，dictSetVal
+//如果设置了rehashidx，优先使用ht[1]；构建entry，使用头插入插入index所在链表，然后将key复制进entry(可能需要分配内存，dup函数)
+//如果构建entry成功，将value复制进entry
 int dictAdd(dict *d, void *key, void *val);
+
+//通过key构建entry
 dictEntry *dictAddRaw(dict *d, void *key);
+//首先尝试添加，如果添加成功，返回
+//查找，返回指向entry的指针，修改value
 int dictReplace(dict *d, void *key, void *val);
+//查找，如果不为空，返回entry指针，否则添加进dict
 dictEntry *dictReplaceRaw(dict *d, void *key);
+
+//调用dictGenericDelete
+//nofree=0
 int dictDelete(dict *d, const void *key);
+
+//调用dictGenericDelete
+//nofree=1
 int dictDeleteNoFree(dict *d, const void *key);
+
+//清除并销毁字典dict内部的哈希表
 void dictRelease(dict *d);
+
+//通过key查找,不存在返回NULL
 dictEntry * dictFind(dict *d, const void *key);
+
+//通过key返回value，否则返回NULL
+//内部调用dictFind
 void *dictFetchValue(dict *d, const void *key);
+
+//调整哈希表容量，目标是用最小的散列数组来容纳所有的键值对。
 int dictResize(dict *d);
+
+//初始化一个普通迭代器
+                                                 //当一个迭代器添加到一个dict上面时，dict的iterator个数为什么没有改变？？？？？？
 dictIterator *dictGetIterator(dict *d);
+
+//safe设置为1
 dictIterator *dictGetSafeIterator(dict *d);
+
+//遍历哈希表
 dictEntry *dictNext(dictIterator *iter);
+//释放迭代器
 void dictReleaseIterator(dictIterator *iter);
+
+//随机，如果没有重哈希，只计算ht[0]，否则计算两个表，然后在得到的非空桶里面随机出一个值所在的entry返回
 dictEntry *dictGetRandomKey(dict *d);
+
+//改自dictGetRandomKey，比dictGetRandomKey快
 unsigned int dictGetSomeKeys(dict *d, dictEntry **des, unsigned int count);
+//调用_dictPrintStatsHt，debugging
 void dictPrintStats(dict *d);
+//hash函数
 unsigned int dictGenHashFunction(const void *key, int len);
+//hash函数
 unsigned int dictGenCaseHashFunction(const unsigned char *buf, int len);
+//清空字典上的所有哈希表节点，并重置字典属性
+//和dictRelease的区别是并不删除dict
 void dictEmpty(dict *d, void(callback)(void*));
+//dict_can_resize = 1
 void dictEnableResize(void);
+//dict_can_resize = 0
 void dictDisableResize(void);
+
+//重哈希，将表0中的元素逐步移动到表1
 int dictRehash(dict *d, int n);
+
+//在给定毫秒数内，以 100 步为单位，对字典进行 rehash 
 int dictRehashMilliseconds(dict *d, int ms);
+//哈希种子，5381
 void dictSetHashFunctionSeed(unsigned int initval);
+//返回哈希种子，5381
 unsigned int dictGetHashFunctionSeed(void);
+//遍历dict
 unsigned long dictScan(dict *d, unsigned long v, dictScanFunction *fn, void *privdata);
 
 /* Hash table types */
