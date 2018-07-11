@@ -601,7 +601,7 @@ int equalStringObjects(robj *a, robj *b) {
     }
 }
 
-//返回robj存储长度
+//返回robj存储数据长度
 size_t stringObjectLen(robj *o) {
     redisAssertWithInfo(NULL,o,o->type == REDIS_STRING);
 	//rawstr或者embstr类型(sds类型)
