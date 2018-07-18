@@ -34,7 +34,7 @@
  * String Commands
  *----------------------------------------------------------------------------*/
 
-//³¤¶È×î³¤Îª512M
+//é•¿åº¦æœ€é•¿ä¸º512M
 static int checkStringLength(redisClient *c, long long size) {
     if (size > 512*1024*1024) {
         addReplyError(c,"string exceeds maximum allowed size (512MB)");
@@ -63,11 +63,11 @@ static int checkStringLength(redisClient *c, long long size) {
 #define REDIS_SET_NX (1<<0)     /* Set if key not exists. */
 #define REDIS_SET_XX (1<<1)     /* Set if key exists. */
 
-//´¦Àí´«Èë²ÎÊı SET£¬SETEX£¬PSETEX£¬SETNX
+//å¤„ç†ä¼ å…¥å‚æ•° SETï¼ŒSETEXï¼ŒPSETEXï¼ŒSETNX
 void setGenericCommand(redisClient *c, int flags, robj *key, robj *val, robj *expire, int unit, robj *ok_reply, robj *abort_reply) {
     long long milliseconds = 0; /* initialized to avoid any harmness warning */
 
-	//Èç¹ûexpire²»Îª¿Õ£¬×ª»»³Élong longÀàĞÍ
+	//å¦‚æœexpireä¸ä¸ºç©ºï¼Œè½¬æ¢æˆlong longç±»å‹
     if (expire) {
         if (getLongLongFromObjectOrReply(c, expire, &milliseconds, NULL) != REDIS_OK)
             return;
@@ -75,11 +75,11 @@ void setGenericCommand(redisClient *c, int flags, robj *key, robj *val, robj *ex
             addReplyErrorFormat(c,"invalid expire time in %s",c->cmd->name);
             return;
         }
-		//unit == 0 ÉèÖÃÎªÃë
+		//unit == 0 è®¾ç½®ä¸ºç§’
         if (unit == UNIT_SECONDS) milliseconds *= 1000;
     }
 
-	//Èç¹ûflagÉèÖÃÁËkey´æÔÚ£¬»òÕßflagÉèÖÃÁËkey²»´æÔÚ
+	//å¦‚æœflagè®¾ç½®äº†keyå­˜åœ¨ï¼Œæˆ–è€…flagè®¾ç½®äº†keyä¸å­˜åœ¨
     if ((flags & REDIS_SET_NX && lookupKeyWrite(c->db,key) != NULL) ||
         (flags & REDIS_SET_XX && lookupKeyWrite(c->db,key) == NULL))
     {
@@ -87,11 +87,11 @@ void setGenericCommand(redisClient *c, int flags, robj *key, robj *val, robj *ex
         return;
     }
 	
-	//´Ëº¯Êı¿ÉÓÃÓÚ½«¼ü£¨ÎŞÂÛÊÇ·ñ´æÔÚ£©ÉèÖÃÎªĞÂ¶ÔÏó¡£
+	//æ­¤å‡½æ•°å¯ç”¨äºå°†é”®ï¼ˆæ— è®ºæ˜¯å¦å­˜åœ¨ï¼‰è®¾ç½®ä¸ºæ–°å¯¹è±¡ã€‚
     setKey(c->db,key,val);
-	//¼ÇÂ¼ÉÏ´Î±£´æµ½dbºóËù×öµÄ¸ü¸Ä²Ù×÷Êı
+	//è®°å½•ä¸Šæ¬¡ä¿å­˜åˆ°dbåæ‰€åšçš„æ›´æ”¹æ“ä½œæ•°
     server.dirty++;
-	//ÉèÖÃÁËexpire
+	//è®¾ç½®äº†expire
     if (expire) setExpire(c->db,key,mstime()+milliseconds);
 	//
     notifyKeyspaceEvent(REDIS_NOTIFY_STRING,"set",key,c->db->id);
@@ -101,8 +101,8 @@ void setGenericCommand(redisClient *c, int flags, robj *key, robj *val, robj *ex
 }
 
 /* SET key value [NX] [XX] [EX <seconds>] [PX <milliseconds>] */
-//½âÎö²ÎÊı£¬nx xx ex px
-//Ã¿¸ö²ÎÊı¶¼ÊÇÒ»¸örobjÀàĞÍ
+//è§£æå‚æ•°ï¼Œnx xx ex px
+//æ¯ä¸ªå‚æ•°éƒ½æ˜¯ä¸€ä¸ªrobjç±»å‹
 void setCommand(redisClient *c) {
     int j;
     robj *expire = NULL;
@@ -111,7 +111,7 @@ void setCommand(redisClient *c) {
 
     for (j = 3; j < c->argc; j++) {
         char *a = c->argv[j]->ptr;
-		//next´æ·ÅÏÂÒ»¸ö²ÎÊı£¬ÓÃÓÚ´¦Àí²ÎÊıÀïÃæÓĞÖµµÄÇé¿ö
+		//nextå­˜æ”¾ä¸‹ä¸€ä¸ªå‚æ•°ï¼Œç”¨äºå¤„ç†å‚æ•°é‡Œé¢æœ‰å€¼çš„æƒ…å†µ
         robj *next = (j == c->argc-1) ? NULL : c->argv[j+1];
 
 		//nx
@@ -122,29 +122,29 @@ void setCommand(redisClient *c) {
         } else if ((a[0] == 'x' || a[0] == 'X') &&
                    (a[1] == 'x' || a[1] == 'X') && a[2] == '\0') {
             flags |= REDIS_SET_XX;
-		//ex£¬ºóÃæÊÇÖµ
+		//exï¼Œåé¢æ˜¯å€¼
         } else if ((a[0] == 'e' || a[0] == 'E') &&
                    (a[1] == 'x' || a[1] == 'X') && a[2] == '\0' && next) {
             unit = UNIT_SECONDS;
             expire = next;
-			//ÍùºóÒÆ¶¯Ò»Î»
+			//å¾€åç§»åŠ¨ä¸€ä½
             j++;
         } else if ((a[0] == 'p' || a[0] == 'P') &&
                    (a[1] == 'x' || a[1] == 'X') && a[2] == '\0' && next) {
             unit = UNIT_MILLISECONDS;
             expire = next;
-			//ÍùºóÒÆ¶¯Ò»Î»
+			//å¾€åç§»åŠ¨ä¸€ä½
             j++;
         } else {
-			//³ö´í
+			//å‡ºé”™
             addReply(c,shared.syntaxerr);
             return;
         }
     }
 
-	//Å¬Á¦¼õÉÙ¿Õ¼äÊ¹ÓÃ
+	//åŠªåŠ›å‡å°‘ç©ºé—´ä½¿ç”¨
     c->argv[2] = tryObjectEncoding(c->argv[2]);
-	//½âÎöÃüÁî key value expire unit
+	//è§£æå‘½ä»¤ key value expire unit
     setGenericCommand(c,flags,c->argv[1],c->argv[2],expire,unit,NULL,NULL);
 }
 
@@ -153,17 +153,17 @@ void setnxCommand(redisClient *c) {
     c->argv[2] = tryObjectEncoding(c->argv[2]);
 	//shared.cone 	ok_replay
 	//shared.czero 	abort_reply
-	//·µ»Ø¸øÓÃ»§µÄĞÅÏ¢
+	//è¿”å›ç»™ç”¨æˆ·çš„ä¿¡æ¯
     setGenericCommand(c,REDIS_SET_NX,c->argv[1],c->argv[2],NULL,0,shared.cone,shared.czero);
 }
 
-//set expire£¬ÒÔÃëÎªµ¥Î»
+//set expireï¼Œä»¥ç§’ä¸ºå•ä½
 void setexCommand(redisClient *c) {
     c->argv[3] = tryObjectEncoding(c->argv[3]);
     setGenericCommand(c,REDIS_SET_NO_FLAGS,c->argv[1],c->argv[3],c->argv[2],UNIT_SECONDS,NULL,NULL);
 }
 
-//set expire£¬ÒÔºÁÃëÎªµ¥Î»
+//set expireï¼Œä»¥æ¯«ç§’ä¸ºå•ä½
 void psetexCommand(redisClient *c) {
     c->argv[3] = tryObjectEncoding(c->argv[3]);
     setGenericCommand(c,REDIS_SET_NO_FLAGS,c->argv[1],c->argv[3],c->argv[2],UNIT_MILLISECONDS,NULL,NULL);
@@ -193,36 +193,36 @@ void getCommand(redisClient *c) {
 //
 void getsetCommand(redisClient *c) {
     if (getGenericCommand(c) == REDIS_ERR) return;
-	//¾¡Á¦ÊÍ·Å¿Õ¼ä
+	//å°½åŠ›é‡Šæ”¾ç©ºé—´
     c->argv[2] = tryObjectEncoding(c->argv[2]);
-	//´Ëº¯Êı¿ÉÓÃÓÚ½«¼ü£¨ÎŞÂÛÊÇ·ñ´æÔÚ£©ÉèÖÃÎªĞÂ¶ÔÏó¡£
+	//æ­¤å‡½æ•°å¯ç”¨äºå°†é”®ï¼ˆæ— è®ºæ˜¯å¦å­˜åœ¨ï¼‰è®¾ç½®ä¸ºæ–°å¯¹è±¡ã€‚
     setKey(c->db,c->argv[1],c->argv[2]);
     notifyKeyspaceEvent(REDIS_NOTIFY_STRING,"set",c->argv[1],c->db->id);
 	//
     server.dirty++;
 }
 
-//setrange ÃüÁî²ÎÊı´¦Àí
+//setrange å‘½ä»¤å‚æ•°å¤„ç†
 //SETRANGE KEY_NAME OFFSET VALUE
 void setrangeCommand(redisClient *c) {
     robj *o;
     long offset;
-	//»ñÈ¡Öµ
+	//è·å–å€¼
     sds value = c->argv[3]->ptr;
 
-	//»ñÈ¡offset£¬Ê¹ÓÃlong ´æ´¢
+	//è·å–offsetï¼Œä½¿ç”¨long å­˜å‚¨
     if (getLongFromObjectOrReply(c,c->argv[2],&offset,NULL) != REDIS_OK)
         return;
 
-	//offset ²ÎÊı´íÎó
+	//offset å‚æ•°é”™è¯¯
     if (offset < 0) {
         addReplyError(c,"offset is out of range");
         return;
     }
 
-	//²éÕÒkey
+	//æŸ¥æ‰¾key
     o = lookupKeyWrite(c->db,c->argv[1]);
-	//²»´æÔÚ
+	//ä¸å­˜åœ¨
     if (o == NULL) {
         /* Return 0 when setting nothing on a non-existing string */
         if (sdslen(value) == 0) {
@@ -234,7 +234,7 @@ void setrangeCommand(redisClient *c) {
         if (checkStringLength(c,offset+sdslen(value)) != REDIS_OK)
             return;
 
-		//´´½¨Ò»¸ö£¬²¢Ìí¼Óµ½dbÖĞ
+		//åˆ›å»ºä¸€ä¸ªï¼Œå¹¶æ·»åŠ åˆ°dbä¸­
         o = createObject(REDIS_STRING,sdsempty());
         dbAdd(c->db,c->argv[1],o);
     } else {
@@ -245,7 +245,7 @@ void setrangeCommand(redisClient *c) {
             return;
 
         /* Return existing string length when setting nothing */
-		//³¤¶È
+		//é•¿åº¦
         olen = stringObjectLen(o);
         if (sdslen(value) == 0) {
             addReplyLongLong(c,olen);
@@ -261,12 +261,12 @@ void setrangeCommand(redisClient *c) {
     }
 
     if (sdslen(value) > 0) {
-		//³¤¶ÈÔö¼Óµ½Ö¸¶¨³¤¶È
+		//é•¿åº¦å¢åŠ åˆ°æŒ‡å®šé•¿åº¦
         o->ptr = sdsgrowzero(o->ptr,offset+sdslen(value));
-		//ptr+offsetÎ»ÖÃ¿ªÊ¼Ìæ»»³Évalue
+		//ptr+offsetä½ç½®å¼€å§‹æ›¿æ¢æˆvalue
         memcpy((char*)o->ptr+offset,value,sdslen(value));
         signalModifiedKey(c->db,c->argv[1]);
-		//·¢ËÍÍ¨Öª
+		//å‘é€é€šçŸ¥
         notifyKeyspaceEvent(REDIS_NOTIFY_STRING,
             "setrange",c->argv[1],c->db->id);
         server.dirty++;
@@ -274,7 +274,7 @@ void setrangeCommand(redisClient *c) {
     addReplyLongLong(c,sdslen(o->ptr));
 }
 
-//getrange ÃüÁî²ÎÊı´¦Àí
+//getrange å‘½ä»¤å‚æ•°å¤„ç†
 //GETRANGE KEY_NAME start end
 void getrangeCommand(redisClient *c) {
     robj *o;
@@ -282,34 +282,34 @@ void getrangeCommand(redisClient *c) {
     char *str, llbuf[32];
     size_t strlen;
 
-	//¿ªÊ¼Î»ÖÃ´æÈëstart
+	//å¼€å§‹ä½ç½®å­˜å…¥start
     if (getLongLongFromObjectOrReply(c,c->argv[2],&start,NULL) != REDIS_OK)
         return;
-	//Ä©Î²Î»ÖÃ´æÈëend
+	//æœ«å°¾ä½ç½®å­˜å…¥end
     if (getLongLongFromObjectOrReply(c,c->argv[3],&end,NULL) != REDIS_OK)
         return;
-	//²éÕÒkey»òÕßĞ´Èë´íÎó
+	//æŸ¥æ‰¾keyæˆ–è€…å†™å…¥é”™è¯¯
     if ((o = lookupKeyReadOrReply(c,c->argv[1],shared.emptybulk)) == NULL ||
         checkType(c,o,REDIS_STRING)) return;
 
 	
-	//ÕûĞÎ×ª»»³Éstring
+	//æ•´å½¢è½¬æ¢æˆstring
     if (o->encoding == REDIS_ENCODING_INT) {
         str = llbuf;
         strlen = ll2string(llbuf,sizeof(llbuf),(long)o->ptr);
-	//stringÀàĞÍ
+	//stringç±»å‹
     } else {
         str = o->ptr;
         strlen = sdslen(str);
     }
 
     /* Convert negative indexes */
-	//´¦Àí¸ºÊı
+	//å¤„ç†è´Ÿæ•°
     if (start < 0) start = strlen+start;
     if (end < 0) end = strlen+end;
     if (start < 0) start = 0;
     if (end < 0) end = 0;
-	//´óÓÚ×Ü³¤¶È
+	//å¤§äºæ€»é•¿åº¦
     if ((unsigned long long)end >= strlen) end = strlen-1;
 
     /* Precondition: end >= 0 && end < strlen, so the only condition where
@@ -317,18 +317,18 @@ void getrangeCommand(redisClient *c) {
     if (start > end || strlen == 0) {
         addReply(c,shared.emptybulk);
     } else {
-		//ÅúÁ¿·µ»Ø
+		//æ‰¹é‡è¿”å›
         addReplyBulkCBuffer(c,(char*)str+start,end-start+1);
     }
 }
 
-//mget ÃüÁî²ÎÊı
+//mget å‘½ä»¤å‚æ•°
 //MGET KEY1 KEY2 .. KEYN
 void mgetCommand(redisClient *c) {
     int j;
 
-	//ÅúÁ¿´¦ÀíµÄ³¤¶È
-	//Èç¹û³¤¶È´óÓÚ32£¬ÓÃbuf´æ·Å£¬·ñÔòÊ¹ÓÃshared.mbulkhdr[]
+	//æ‰¹é‡å¤„ç†çš„é•¿åº¦
+	//å¦‚æœé•¿åº¦å¤§äº32ï¼Œç”¨bufå­˜æ”¾ï¼Œå¦åˆ™ä½¿ç”¨shared.mbulkhdr[]
     addReplyMultiBulkLen(c,c->argc-1);
     for (j = 1; j < c->argc; j++) {
         robj *o = lookupKeyRead(c->db,c->argv[j]);
@@ -345,18 +345,18 @@ void mgetCommand(redisClient *c) {
     }
 }
 
-//mset ÃüÁî²ÎÊı
+//mset å‘½ä»¤å‚æ•°
 void msetGenericCommand(redisClient *c, int nx) {
     int j, busykeys = 0;
 
-	//Å¼Êı¸ö
+	//å¶æ•°ä¸ª
     if ((c->argc % 2) == 0) {
         addReplyError(c,"wrong number of arguments for MSET");
         return;
     }
     /* Handle the NX flag. The MSETNX semantic is to return zero and don't
      * set nothing at all if at least one already key exists. */
-	//Èç¹ûÖÁÉÙÒ»¸ö´æÔÚ£¬·µ»Ø´íÎó
+	//å¦‚æœè‡³å°‘ä¸€ä¸ªå­˜åœ¨ï¼Œè¿”å›é”™è¯¯
     if (nx) {
         for (j = 1; j < c->argc; j += 2) {
             if (lookupKeyWrite(c->db,c->argv[j]) != NULL) {
@@ -369,44 +369,44 @@ void msetGenericCommand(redisClient *c, int nx) {
         }
     }
 	
-	//Ìí¼Ó½ødb
+	//æ·»åŠ è¿›db
     for (j = 1; j < c->argc; j += 2) {
-		//¾¡¿ÉÄÜÊÍ·Å¿Õ¼ä
+		//å°½å¯èƒ½é‡Šæ”¾ç©ºé—´
         c->argv[j+1] = tryObjectEncoding(c->argv[j+1]);
-		//dbÖĞÉèÖÃĞÂ¶ÔÏó
+		//dbä¸­è®¾ç½®æ–°å¯¹è±¡
         setKey(c->db,c->argv[j],c->argv[j+1]);
-		//·¢ËÍÍ¨Öª
+		//å‘é€é€šçŸ¥
         notifyKeyspaceEvent(REDIS_NOTIFY_STRING,"set",c->argv[j],c->db->id);
     }
-	//¸üĞÂdirty¸öÊı
+	//æ›´æ–°dirtyä¸ªæ•°
     server.dirty += (c->argc-1)/2;
 	//shared.cone ???
     addReply(c, nx ? shared.cone : shared.ok);
 }
 
-//mset ÃüÁî
+//mset å‘½ä»¤
 void msetCommand(redisClient *c) {
     msetGenericCommand(c,0);
 }
 
-//msetnx ÃüÁî
+//msetnx å‘½ä»¤
 void msetnxCommand(redisClient *c) {
     msetGenericCommand(c,1);
 }
 
-//incrºÍdecr¶¼Ê¹ÓÃ¸Ã·½·¨
+//incrå’Œdecréƒ½ä½¿ç”¨è¯¥æ–¹æ³•
 void incrDecrCommand(redisClient *c, long long incr) {
     long long value, oldvalue;
     robj *o, *new;
 
-	//²éÕÒkey
+	//æŸ¥æ‰¾key
     o = lookupKeyWrite(c->db,c->argv[1]);
-	//Îª²»¿Õ£¬²¢ÇÒÎªstringÀàĞÍ£¬·µ»Ø
+	//ä¸ºä¸ç©ºï¼Œå¹¶ä¸”ä¸ºstringç±»å‹ï¼Œè¿”å›
     if (o != NULL && checkType(c,o,REDIS_STRING)) return;
-	//×ª»»³Élong longÀàĞÍ£¬²¢´æ·ÅÔÚvalueÖĞ
+	//è½¬æ¢æˆlong longç±»å‹ï¼Œå¹¶å­˜æ”¾åœ¨valueä¸­
     if (getLongLongFromObjectOrReply(c,o,&value,NULL) != REDIS_OK) return;
 
-	//±£´æÔ­Öµ
+	//ä¿å­˜åŸå€¼
     oldvalue = value;
 	//overflow
     if ((incr < 0 && oldvalue < 0 && incr < (LLONG_MIN-oldvalue)) ||
@@ -414,10 +414,10 @@ void incrDecrCommand(redisClient *c, long long incr) {
         addReplyError(c,"increment or decrement would overflow");
         return;
     }
-	//ĞŞ¸Ä
+	//ä¿®æ”¹
     value += incr;
 
-	//Âú×ãÊ¹ÓÃlong ´æ´¢Ê±
+	//æ»¡è¶³ä½¿ç”¨long å­˜å‚¨æ—¶
     if (o && o->refcount == 1 && o->encoding == REDIS_ENCODING_INT &&
         (value < 0 || value >= REDIS_SHARED_INTEGERS) &&
         value >= LONG_MIN && value <= LONG_MAX)
@@ -425,19 +425,19 @@ void incrDecrCommand(redisClient *c, long long incr) {
         new = o;
         o->ptr = (void*)((long)value);
     } else {
-		//·ñÔòÊ¹ÓÃ×Ö·û´®´æ´¢
+		//å¦åˆ™ä½¿ç”¨å­—ç¬¦ä¸²å­˜å‚¨
         new = createStringObjectFromLongLong(value);
         if (o) {
-			//´æÔÚ£¬ĞŞ¸Ä
+			//å­˜åœ¨ï¼Œä¿®æ”¹
             dbOverwrite(c->db,c->argv[1],new);
         } else {
-			//²»´æÔÚ£¬Ìí¼Ó
+			//ä¸å­˜åœ¨ï¼Œæ·»åŠ 
             dbAdd(c->db,c->argv[1],new);
         }
     }
-	//Í¨ÖªĞŞ¸Ä
+	//é€šçŸ¥ä¿®æ”¹
     signalModifiedKey(c->db,c->argv[1]);
-	//Í¬Ê±ÊÂ¼ş
+	//åŒæ—¶äº‹ä»¶
     notifyKeyspaceEvent(REDIS_NOTIFY_STRING,"incrby",c->argv[1],c->db->id);
     server.dirty++;
     addReply(c,shared.colon);
@@ -445,65 +445,65 @@ void incrDecrCommand(redisClient *c, long long incr) {
     addReply(c,shared.crlf);
 }
 
-//Ôö1
+//å¢1
 void incrCommand(redisClient *c) {
     incrDecrCommand(c,1);
 }
 
-//¼õ1
+//å‡1
 void decrCommand(redisClient *c) {
     incrDecrCommand(c,-1);
 }
 
-//incrbyÃüÁî
+//incrbyå‘½ä»¤
 //INCRBY KEY_NAME INCR_AMOUNT
 void incrbyCommand(redisClient *c) {
     long long incr;
 
-	//×ª»»³Élong long ´æÈëincrÖĞ
+	//è½¬æ¢æˆlong long å­˜å…¥incrä¸­
     if (getLongLongFromObjectOrReply(c, c->argv[2], &incr, NULL) != REDIS_OK) return;
     incrDecrCommand(c,incr);
 }
 
-//decrbyÃüÁî
+//decrbyå‘½ä»¤
 //DECRBY KEY_NAME INCR_AMOUNT
 void decrbyCommand(redisClient *c) {
     long long incr;
-	//×ª»»³Élong long ´æÈëincr
+	//è½¬æ¢æˆlong long å­˜å…¥incr
     if (getLongLongFromObjectOrReply(c, c->argv[2], &incr, NULL) != REDIS_OK) return;
     incrDecrCommand(c,-incr);
 }
 
 
-//incrby ÃüÁî
-//²ÎÊıÎª¸¡µãÊı
+//incrby å‘½ä»¤
+//å‚æ•°ä¸ºæµ®ç‚¹æ•°
 void incrbyfloatCommand(redisClient *c) {
     long double incr, value;
     robj *o, *new, *aux;
 
-	//²éÕÒ
+	//æŸ¥æ‰¾
     o = lookupKeyWrite(c->db,c->argv[1]);
     if (o != NULL && checkType(c,o,REDIS_STRING)) return;
-	//getLongDoubleFromObjectOrReply º¯ÊıÈç¹ûoÎªNULL£¬valueÉèÖÃÎª0
+	//getLongDoubleFromObjectOrReply å‡½æ•°å¦‚æœoä¸ºNULLï¼Œvalueè®¾ç½®ä¸º0
     if (getLongDoubleFromObjectOrReply(c,o,&value,NULL) != REDIS_OK ||
         getLongDoubleFromObjectOrReply(c,c->argv[2],&incr,NULL) != REDIS_OK)
         return;
 
-	//ĞŞ¸ÄvalueÖµ
+	//ä¿®æ”¹valueå€¼
     value += incr;
     if (isnan(value) || isinf(value)) {
         addReplyError(c,"increment would produce NaN or Infinity");
         return;
     }
-	//long double×ªstring
+	//long doubleè½¬string
     new = createStringObjectFromLongDouble(value,1);
-	//´æÔÚĞŞ¸Ä
+	//å­˜åœ¨ä¿®æ”¹
     if (o)
         dbOverwrite(c->db,c->argv[1],new);
-	//·ñÔòÌí¼Ó
+	//å¦åˆ™æ·»åŠ 
     else
         dbAdd(c->db,c->argv[1],new);
-	//Í¨Öª
+	//é€šçŸ¥
     signalModifiedKey(c->db,c->argv[1]);
     notifyKeyspaceEvent(REDIS_NOTIFY_STRING,"incrbyfloat",c->argv[1],c->db->id);
     server.dirty++;
@@ -518,15 +518,15 @@ void incrbyfloatCommand(redisClient *c) {
     rewriteClientCommandArgument(c,2,new);
 }
 
-//append ÃüÁî
+//append å‘½ä»¤
 //APPEND KEY_NAME NEW_VALUE
 void appendCommand(redisClient *c) {
     size_t totlen;
     robj *o, *append;
 
-	//²éÕÒ
+	//æŸ¥æ‰¾
     o = lookupKeyWrite(c->db,c->argv[1]);
-	//²»´æÔÚ´´½¨key£¬²¢Ìí¼Ó
+	//ä¸å­˜åœ¨åˆ›å»ºkeyï¼Œå¹¶æ·»åŠ 
     if (o == NULL) {
         /* Create the key */
         c->argv[2] = tryObjectEncoding(c->argv[2]);
@@ -541,14 +541,14 @@ void appendCommand(redisClient *c) {
         /* "append" is an argument, so always an sds */
         append = c->argv[2];
         totlen = stringObjectLen(o)+sdslen(append->ptr);
-		//ÊÇ·ñĞ¡ÓÚ512M
+		//æ˜¯å¦å°äº512M
         if (checkStringLength(c,totlen) != REDIS_OK)
             return;
 
         /* Append the value */
-		//Ö»ÓĞrawÀàĞÍºÍÒıÓÃ¼ÆÊıÎª1µÄ²ÅÄÜappend²Ù×÷
+		//åªæœ‰rawç±»å‹å’Œå¼•ç”¨è®¡æ•°ä¸º1çš„æ‰èƒ½appendæ“ä½œ
         o = dbUnshareStringValue(c->db,c->argv[1],o);
-		//×·¼Ó
+		//è¿½åŠ 
         o->ptr = sdscatlen(o->ptr,append->ptr,sdslen(append->ptr));
         totlen = sdslen(o->ptr);
     }
