@@ -898,6 +898,10 @@ void rpoplpushCommand(redisClient *c) {
 /* Set a client in blocking mode for the specified key, with the specified
  * timeout */
 //阻塞key 用于阻塞命令
+//bpop.keys 这个成员是一个字典结构，这个词典记录着所有造成客户端阻塞的键，这个词典记录着所有造成客户端阻塞的键。而且加入字典中的键为传入的所有key，而值则为NULL。
+//blocking_keys 成员，这是一个字典，该字典的键是造成客户端阻塞的键，而字典的值则为一个链表，链表中包含着所有被阻塞的客户端
+//首先需要将阻塞的key添加到bpop.keys中，{key, NULL}，表示当前造成该client阻塞的key
+//然后将由当前key引起的阻塞存储进blocking_keys中，这也是一个字典，键是当前造成阻塞的keys，值是一个list，存储着阻塞的client
 void blockForKeys(redisClient *c, robj **keys, int numkeys, mstime_t timeout, robj *target) {
     dictEntry *de;
     list *l;
@@ -913,11 +917,13 @@ void blockForKeys(redisClient *c, robj **keys, int numkeys, mstime_t timeout, ro
 	//添加到bpop.keys中
     for (j = 0; j < numkeys; j++) {
         /* If the key already exists in the dict ignore it. */
+		//bpop.keys 记录所有造成client阻塞的键，value部分为NULL
         if (dictAdd(c->bpop.keys,keys[j],NULL) != DICT_OK) continue;
         incrRefCount(keys[j]);
 
         /* And in the other "side", to map keys -> clients */
 		// 查找db的blocking_keys中是否存在阻塞的key
+		//db->blocking_keys是一个字典，字典的键为造成client阻塞的一个键，值是一个链表，保存着所有被该键阻塞的client
         de = dictFind(c->db->blocking_keys,keys[j]);
         if (de == NULL) {
             int retval;
@@ -931,29 +937,36 @@ void blockForKeys(redisClient *c, robj **keys, int numkeys, mstime_t timeout, ro
         } else {
             l = dictGetVal(de);
         }
-		// 在blocking_keys的对应list中添加上client
+		//将当前client加入到阻塞的client的列表
         listAddNodeTail(l,c);
     }
+	//blocking
     blockClient(c,REDIS_BLOCKED_LIST);
 }
 
 /* Unblock a client that's waiting in a blocking operation such as BLPOP.
  * You should never call this function directly, but unblockClient() instead. */
 //解除blocking状态
+//首先需要将bpop.keys中所有字典删除
+//然后在blocking_keys中查找，删除当前的键对应list中存储的client
 void unblockClientWaitingData(redisClient *c) {
     dictEntry *de;
     dictIterator *di;
     list *l;
 
     redisAssertWithInfo(c,NULL,dictSize(c->bpop.keys) != 0);
+	//dict迭代器
     di = dictGetIterator(c->bpop.keys);
     /* The client may wait for multiple keys, so unblock it for every key. */
+	//解除所有blockding状态的key对应的list中的client
     while((de = dictNext(di)) != NULL) {
         robj *key = dictGetKey(de);
 
         /* Remove this client from the list of clients waiting for this key. */
+		//返回value或者NULL
         l = dictFetchValue(c->db->blocking_keys,key);
         redisAssertWithInfo(c,key,l != NULL);
+		//在删除
         listDelNode(l,listSearchKey(l,c));
         /* If the list is empty we need to remove it to avoid wasting memory */
         if (listLength(l) == 0)
@@ -962,6 +975,7 @@ void unblockClientWaitingData(redisClient *c) {
     dictReleaseIterator(di);
 
     /* Cleanup the client structure */
+	//删除bpop.keys
     dictEmpty(c->bpop.keys,NULL);
     if (c->bpop.target) {
         decrRefCount(c->bpop.target);
@@ -976,6 +990,7 @@ void unblockClientWaitingData(redisClient *c) {
  * made by a script or in the context of MULTI/EXEC.
  *
  * The list will be finally processed by handleClientsBlockedOnLists() */
+//添加到ready_keys中
 void signalListAsReady(redisDb *db, robj *key) {
     readyList *rl;
 
@@ -1235,18 +1250,24 @@ void brpopCommand(redisClient *c) {
 void brpoplpushCommand(redisClient *c) {
     mstime_t timeout;
 
+	//时间保存到timeout
     if (getTimeoutFromObjectOrReply(c,c->argv[3],&timeout,UNIT_SECONDS)
         != REDIS_OK) return;
 
+	//key
     robj *key = lookupKeyWrite(c->db, c->argv[1]);
 
+	
+	//key不存在
     if (key == NULL) {
+		//如果在事务中直接返回
         if (c->flags & REDIS_MULTI) {
             /* Blocking against an empty list in a multi state
              * returns immediately. */
             addReply(c, shared.nullbulk);
         } else {
             /* The list is empty and the client blocks. */
+			//开始阻塞
             blockForKeys(c, c->argv + 1, 1, timeout, c->argv[2]);
         }
     } else {
