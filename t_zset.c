@@ -532,6 +532,7 @@ static int zslParseRange(robj *min, robj *max, zrangespec *spec) {
   *
   * If the string is not a valid range REDIS_ERR is returned, and the value
   * of *dest and *ex is undefined. */
+
 int zslParseLexRangeItem(robj *item, robj **dest, int *ex) {
     char *c = item->ptr;
 
@@ -685,7 +686,10 @@ zskiplistNode *zslLastInLexRange(zskiplist *zsl, zlexrangespec *range) {
 /*-----------------------------------------------------------------------------
  * Ziplist-backed sorted set API
  *----------------------------------------------------------------------------*/
-
+/*
+* 默认情况下，当元素个数不超过128，字符串长度小于64，跳跃表默认使用ziplist存储，key:value，按照score排序
+*/
+//sptr处元素的score
 double zzlGetScore(unsigned char *sptr) {
     unsigned char *vstr;
     unsigned int vlen;
@@ -710,6 +714,7 @@ double zzlGetScore(unsigned char *sptr) {
 /* Return a ziplist element as a Redis string object.
  * This simple abstraction can be used to simplifies some code at the
  * cost of some performance. */
+//返回一个robj
 robj *ziplistGetObject(unsigned char *sptr) {
     unsigned char *vstr;
     unsigned int vlen;
@@ -752,6 +757,7 @@ unsigned int zzlLength(unsigned char *zl) {
 
 /* Move to next entry based on the values in eptr and sptr. Both are set to
  * NULL when there is no next entry. */
+//移向下一个元素
 void zzlNext(unsigned char *zl, unsigned char **eptr, unsigned char **sptr) {
     unsigned char *_eptr, *_sptr;
     redisAssert(*eptr != NULL && *sptr != NULL);
@@ -771,6 +777,7 @@ void zzlNext(unsigned char *zl, unsigned char **eptr, unsigned char **sptr) {
 
 /* Move to the previous entry based on the values in eptr and sptr. Both are
  * set to NULL when there is no next entry. */
+//前一个元素
 void zzlPrev(unsigned char *zl, unsigned char **eptr, unsigned char **sptr) {
     unsigned char *_eptr, *_sptr;
     redisAssert(*eptr != NULL && *sptr != NULL);
@@ -790,6 +797,7 @@ void zzlPrev(unsigned char *zl, unsigned char **eptr, unsigned char **sptr) {
 
 /* Returns if there is a part of the zset is in range. Should only be used
  * internally by zzlFirstInRange and zzlLastInRange. */
+//是否在range 范围内
 int zzlIsInRange(unsigned char *zl, zrangespec *range) {
     unsigned char *p;
     double score;
@@ -802,12 +810,14 @@ int zzlIsInRange(unsigned char *zl, zrangespec *range) {
     p = ziplistIndex(zl,-1); /* Last score. */
     if (p == NULL) return 0; /* Empty sorted set */
     score = zzlGetScore(p);
+	//最小值要不小于range最小值
     if (!zslValueGteMin(score,range))
         return 0;
 
     p = ziplistIndex(zl,1); /* First score. */
     redisAssert(p != NULL);
     score = zzlGetScore(p);
+	//最大值不大于于range最大值
     if (!zslValueLteMax(score,range))
         return 0;
 
@@ -970,6 +980,7 @@ unsigned char *zzlFind(unsigned char *zl, robj *ele, double *score) {
     unsigned char *eptr = ziplistIndex(zl,0), *sptr;
 
     ele = getDecodedObject(ele);
+	//顺序查找
     while (eptr != NULL) {
         sptr = ziplistNext(zl,eptr);
         redisAssertWithInfo(NULL,ele,sptr != NULL);
@@ -1132,6 +1143,7 @@ unsigned char *zzlDeleteRangeByRank(unsigned char *zl, unsigned int start, unsig
  * Common sorted set API
  *----------------------------------------------------------------------------*/
 
+//返回长度
 unsigned int zsetLength(robj *zobj) {
     int length = -1;
     if (zobj->encoding == REDIS_ENCODING_ZIPLIST) {
@@ -1144,6 +1156,7 @@ unsigned int zsetLength(robj *zobj) {
     return length;
 }
 
+//zobj转换成encoding编码格式
 void zsetConvert(robj *zobj, int encoding) {
     zset *zs;
     zskiplistNode *node, *next;
@@ -1151,6 +1164,7 @@ void zsetConvert(robj *zobj, int encoding) {
     double score;
 
     if (zobj->encoding == encoding) return;
+	//ziplist -> skiplist
     if (zobj->encoding == REDIS_ENCODING_ZIPLIST) {
         unsigned char *zl = zobj->ptr;
         unsigned char *eptr, *sptr;
@@ -1161,15 +1175,19 @@ void zsetConvert(robj *zobj, int encoding) {
         if (encoding != REDIS_ENCODING_SKIPLIST)
             redisPanic("Unknown target encoding");
 
+		//一个dict指针和一个skiplist指针
         zs = zmalloc(sizeof(*zs));
         zs->dict = dictCreate(&zsetDictType,NULL);
         zs->zsl = zslCreate();
 
+		//key
         eptr = ziplistIndex(zl,0);
         redisAssertWithInfo(NULL,zobj,eptr != NULL);
+		//value
         sptr = ziplistNext(zl,eptr);
         redisAssertWithInfo(NULL,zobj,sptr != NULL);
 
+		//遍历，插入到skiplist中
         while (eptr != NULL) {
             score = zzlGetScore(sptr);
             redisAssertWithInfo(NULL,zobj,ziplistGet(eptr,&vstr,&vlen,&vlong));
@@ -1179,15 +1197,18 @@ void zsetConvert(robj *zobj, int encoding) {
                 ele = createStringObject((char*)vstr,vlen);
 
             /* Has incremented refcount since it was just created. */
+			//插入(生成新的skiplist),同时创建一个dict
             node = zslInsert(zs->zsl,score,ele);
             redisAssertWithInfo(NULL,zobj,dictAdd(zs->dict,ele,&node->score) == DICT_OK);
             incrRefCount(ele); /* Added to dictionary. */
             zzlNext(zl,&eptr,&sptr);
         }
 
+		//释放原来空间
         zfree(zobj->ptr);
         zobj->ptr = zs;
         zobj->encoding = REDIS_ENCODING_SKIPLIST;
+	//zkiplist -> ziplist
     } else if (zobj->encoding == REDIS_ENCODING_SKIPLIST) {
         unsigned char *zl = ziplistNew();
 
@@ -1202,6 +1223,7 @@ void zsetConvert(robj *zobj, int encoding) {
         zfree(zs->zsl->header);
         zfree(zs->zsl);
 
+		//直接遍历level[0]，包含了所有元素
         while (node) {
             ele = getDecodedObject(node->obj);
             zl = zzlInsertAt(zl,NULL,ele,node->score);
@@ -1230,6 +1252,13 @@ void zsetConvert(robj *zobj, int encoding) {
 #define ZADD_NX (1<<1)      /* Don't touch elements not already existing. */
 #define ZADD_XX (1<<2)      /* Only touch elements already exisitng. */
 #define ZADD_CH (1<<3)      /* Return num of elements added or updated. */
+//真正处理命令的函数
+//zadd、zincrby
+//ZADD 参数（options） (>= Redis 3.0.2)
+/*XX：仅仅更新存在的成员，不添加新成员
+* NX：不更新存在的成员，只添加新成员
+* CH：修改返回值为发生变化的成员总数
+*/
 void zaddGenericCommand(redisClient *c, int flags) {
     static char *nanerr = "resulting score is not a number (NaN)";
     robj *key = c->argv[1];
@@ -1422,6 +1451,7 @@ cleanup:
     }
 }
 
+//
 void zaddCommand(redisClient *c) {
     zaddGenericCommand(c,ZADD_NONE);
 }
@@ -1430,6 +1460,8 @@ void zincrbyCommand(redisClient *c) {
     zaddGenericCommand(c,ZADD_INCR);
 }
 
+//ZREM key member [member ...]
+//移除有序集中的一个或多个成员，不存在的成员将被忽略。
 void zremCommand(redisClient *c) {
     robj *key = c->argv[1];
     robj *zobj;
@@ -1438,9 +1470,11 @@ void zremCommand(redisClient *c) {
     if ((zobj = lookupKeyWriteOrReply(c,key,shared.czero)) == NULL ||
         checkType(c,zobj,REDIS_ZSET)) return;
 
+	//编码为ziplist
     if (zobj->encoding == REDIS_ENCODING_ZIPLIST) {
         unsigned char *eptr;
-
+		
+		//循环遍历查找，存在则删除
         for (j = 2; j < c->argc; j++) {
             if ((eptr = zzlFind(zobj->ptr,c->argv[j],NULL)) != NULL) {
                 deleted++;
@@ -1452,6 +1486,8 @@ void zremCommand(redisClient *c) {
                 }
             }
         }
+	//skiplist，删除
+	//通过dict查找是否存在，存在则删除，（dict和ziplist两个都得删除）
     } else if (zobj->encoding == REDIS_ENCODING_SKIPLIST) {
         zset *zs = zobj->ptr;
         dictEntry *de;
@@ -1606,6 +1642,7 @@ void zremrangebylexCommand(redisClient *c) {
     zremrangeGenericCommand(c,ZRANGE_LEX);
 }
 
+//迭代器，迭代器适用于有序集合和集合
 typedef struct {
     robj *subject;
     int type; /* Set, sorted set */
@@ -1665,6 +1702,7 @@ typedef struct {
 typedef union _iterset iterset;
 typedef union _iterzset iterzset;
 
+// 初始化迭代器
 void zuiInitIterator(zsetopsrc *op) {
     if (op->subject == NULL)
         return;
@@ -1701,6 +1739,7 @@ void zuiInitIterator(zsetopsrc *op) {
     }
 }
 
+//释放迭代器空间
 void zuiClearIterator(zsetopsrc *op) {
     if (op->subject == NULL)
         return;
@@ -1728,6 +1767,7 @@ void zuiClearIterator(zsetopsrc *op) {
     }
 }
 
+//
 int zuiLength(zsetopsrc *op) {
     if (op->subject == NULL)
         return 0;
@@ -1955,7 +1995,12 @@ inline static void zunionInterAggregate(double *target, double val, int aggregat
         redisPanic("Unknown ZUNION/INTER aggregate type");
     }
 }
-
+/*
+* 1. 有序集合计算交集的一般算法：先将所有集合按元素个数从小到大排序，然后以元素个数最少的集合，也就是第一个集合为基数，
+* 遍历该集合的所有元素，如果元素在之后的所有集合都存在，则加入结果集中。
+* 2. 有序集合计算并集的一般算法：先将所有集合按元素个数从小到大排序，遍历所有的集合的所有元素，将元素添加到结果集中，
+* 如果元素已不存在，则添加，否则操作下一个元素。
+*/ 
 void zunionInterGenericCommand(redisClient *c, robj *dstkey, int op) {
     int i, j;
     long setnum;
