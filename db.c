@@ -153,7 +153,7 @@ int dbExists(redisDb *db, robj *key) {
  * If there are no keys, NULL is returned.
  *
  * The function makes sure to return keys not already expired. */
-//返回没有过期的随机元素
+//返回没有过期的随机key
 robj *dbRandomKey(redisDb *db) {
     dictEntry *de;
 
@@ -302,6 +302,7 @@ void flushallCommand(redisClient *c) {
     server.dirty++;
 }
 
+//DEL key [key ...]
 void delCommand(redisClient *c) {
     int deleted = 0, j;
 
@@ -318,6 +319,7 @@ void delCommand(redisClient *c) {
     addReplyLongLong(c,deleted);
 }
 
+//EXISTS KEY_NAME
 void existsCommand(redisClient *c) {
     expireIfNeeded(c->db,c->argv[1]);
     if (dbExists(c->db,c->argv[1])) {
@@ -327,6 +329,7 @@ void existsCommand(redisClient *c) {
     }
 }
 
+//SELECT index 
 void selectCommand(redisClient *c) {
     long id;
 
@@ -338,6 +341,7 @@ void selectCommand(redisClient *c) {
         addReplyError(c,"SELECT is not allowed in cluster mode");
         return;
     }
+	//切换数据库，让RedisClient.db = &server.db[id]
     if (selectDb(c,id) == REDIS_ERR) {
         addReplyError(c,"invalid DB index");
     } else {
@@ -345,6 +349,8 @@ void selectCommand(redisClient *c) {
     }
 }
 
+//RANDOMKEY
+//从当前数据库中随机返回(不删除)一个 key 。
 void randomkeyCommand(redisClient *c) {
     robj *key;
 
@@ -357,6 +363,8 @@ void randomkeyCommand(redisClient *c) {
     decrRefCount(key);
 }
 
+//KEYS pattern
+//查找所有符合给定模式 pattern 的 key 
 void keysCommand(redisClient *c) {
     dictIterator *di;
     dictEntry *de;
@@ -367,10 +375,13 @@ void keysCommand(redisClient *c) {
 
     di = dictGetSafeIterator(c->db->dict);
     allkeys = (pattern[0] == '*' && pattern[1] == '\0');
+	
+	//循环遍历所有keys
     while((de = dictNext(di)) != NULL) {
         sds key = dictGetKey(de);
         robj *keyobj;
 
+		//是否匹配
         if (allkeys || stringmatchlen(pattern,plen,key,sdslen(key),0)) {
             keyobj = createStringObject(key,sdslen(key));
             if (expireIfNeeded(c->db,keyobj) == 0) {
@@ -386,6 +397,8 @@ void keysCommand(redisClient *c) {
 
 /* This callback is used by scanGenericCommand in order to collect elements
  * returned by the dictionary iterator into a list. */
+
+//将scan命令收集到的结果存进一个链表中，插入末尾
 void scanCallback(void *privdata, const dictEntry *de) {
     void **pd = (void**) privdata;
     list *keys = pd[0];
@@ -403,6 +416,7 @@ void scanCallback(void *privdata, const dictEntry *de) {
         incrRefCount(key);
         val = dictGetVal(de);
         incrRefCount(val);
+	//
     } else if (o->type == REDIS_ZSET) {
         key = dictGetKey(de);
         incrRefCount(key);
@@ -419,6 +433,8 @@ void scanCallback(void *privdata, const dictEntry *de) {
  * if the cursor is valid, store it as unsigned integer into *cursor and
  * returns REDIS_OK. Otherwise return REDIS_ERR and send an error to the
  * client. */
+//获取SCAN当前游标，存入*cursor
+//成功返回REDIS_OK，否则返回REDIS_ERR
 int parseScanCursorOrReply(redisClient *c, robj *o, unsigned long *cursor) {
     char *eptr;
 
@@ -445,6 +461,18 @@ int parseScanCursorOrReply(redisClient *c, robj *o, unsigned long *cursor) {
  *
  * In the case of a Hash object the function returns both the field and value
  * of every element on the Hash. */
+
+/*scan命令处理，包括：
+* SCAN 命令用于迭代当前数据库中的数据库键。
+* SSCAN 命令用于迭代集合键中的元素。
+* HSCAN 命令用于迭代哈希键中的键值对。
+* ZSCAN 命令用于迭代有序集合中的元素（包括元素成员和元素分值）。
+*/
+
+//1. 判断是不是hash table
+//2. 如果是hash table，每次遍历10*count个桶，或者获取到count个数据，或者遍历结束
+//3. 如果是非hash table，一次性遍历完成
+//4. 如果有match，则过滤
 void scanGenericCommand(redisClient *c, robj *o, unsigned long cursor) {
     int i, j;
     list *keys = listCreate();
@@ -456,15 +484,19 @@ void scanGenericCommand(redisClient *c, robj *o, unsigned long cursor) {
 
     /* Object must be NULL (to iterate keys names), or the type of the object
      * must be Set, Sorted Set, or Hash. */
+	//o可以为NULL，当o不为NULL时，对象类型必须为SET、HASH或者ZSET一种
     redisAssert(o == NULL || o->type == REDIS_SET || o->type == REDIS_HASH ||
                 o->type == REDIS_ZSET);
 
+	
     /* Set i to the first option argument. The previous one is the cursor. */
+	//i指向cursor的后一个参数，第一个可选参数
     i = (o == NULL) ? 2 : 3; /* Skip the key argument if needed. */
 
     /* Step 1: Parse options. */
     while (i < c->argc) {
         j = c->argc - i;
+		//COUNT count
         if (!strcasecmp(c->argv[i]->ptr, "count") && j >= 2) {
             if (getLongFromObjectOrReply(c, c->argv[i+1], &count, NULL)
                 != REDIS_OK)
@@ -478,12 +510,14 @@ void scanGenericCommand(redisClient *c, robj *o, unsigned long cursor) {
             }
 
             i += 2;
+		//MATCH pattern
         } else if (!strcasecmp(c->argv[i]->ptr, "match") && j >= 2) {
             pat = c->argv[i+1]->ptr;
             patlen = sdslen(pat);
 
             /* The pattern always matches if it is exactly "*", so it is
              * equivalent to disabling it. */
+			//* 全部匹配，即等同于不使用MATCH参数
             use_pattern = !(pat[0] == '*' && patlen == 1);
 
             i += 2;
@@ -501,8 +535,13 @@ void scanGenericCommand(redisClient *c, robj *o, unsigned long cursor) {
      * just return everything inside the object in a single call, setting the
      * cursor to zero to signal the end of the iteration. */
 
+	//如果编码方式为ziplist、intset或者其他反正不是hash table和skiplist，能够确保只是少量数据，可以一次性全部返回，
+	//设置cursor为0，表示已经遍历到结尾
+	
     /* Handle the case of a hash table. */
+	//处理hash table 的情况
     ht = NULL;
+	//scan命令，处理遍历数据库中所有键值
     if (o == NULL) {
         ht = c->db->dict;
     } else if (o->type == REDIS_SET && o->encoding == REDIS_ENCODING_HT) {
@@ -522,6 +561,7 @@ void scanGenericCommand(redisClient *c, robj *o, unsigned long cursor) {
          * COUNT, so if the hash table is in a pathological state (very
          * sparsely populated) we avoid to block too much time at the cost
          * of returning no or very few elements. */
+		//遍历桶个数为count 的10倍
         long maxiterations = count*10;
 
         /* We pass two pointers to the callback: the list to which it will
@@ -530,9 +570,11 @@ void scanGenericCommand(redisClient *c, robj *o, unsigned long cursor) {
         privdata[0] = keys;
         privdata[1] = o;
         do {
+			//遍历一个桶，调用scanCallback插入到链表中
             cursor = dictScan(ht, cursor, scanCallback, privdata);
         } while (cursor &&
               maxiterations-- &&
+			  //数据长度小于count
               listLength(keys) < (unsigned long)count);
     } else if (o->type == REDIS_SET) {
         int pos = 0;
@@ -541,6 +583,7 @@ void scanGenericCommand(redisClient *c, robj *o, unsigned long cursor) {
         while(intsetGet(o->ptr,pos++,&ll))
             listAddNodeTail(keys,createStringObjectFromLongLong(ll));
         cursor = 0;
+	//非ht，直接遍历全部
     } else if (o->type == REDIS_HASH || o->type == REDIS_ZSET) {
         unsigned char *p = ziplistIndex(o->ptr,0);
         unsigned char *vstr;
@@ -560,6 +603,7 @@ void scanGenericCommand(redisClient *c, robj *o, unsigned long cursor) {
     }
 
     /* Step 3: Filter elements. */
+	//根据match过滤keys
     node = listFirst(keys);
     while (node) {
         robj *kobj = listNodeValue(node);
@@ -606,6 +650,7 @@ void scanGenericCommand(redisClient *c, robj *o, unsigned long cursor) {
     }
 
     /* Step 4: Reply to the client. */
+	//返回给客户端
     addReplyMultiBulkLen(c, 2);
     addReplyBulkLongLong(c,cursor);
 
@@ -623,20 +668,28 @@ cleanup:
 }
 
 /* The SCAN command completely relies on scanGenericCommand. */
+// SCAN cursor [MATCH pattern] [COUNT count]
+// scan命令
 void scanCommand(redisClient *c) {
     unsigned long cursor;
     if (parseScanCursorOrReply(c,c->argv[1],&cursor) == REDIS_ERR) return;
     scanGenericCommand(c,NULL,cursor);
 }
 
+//DBSIZE
+//返回当前数据库的 key 的数量。
 void dbsizeCommand(redisClient *c) {
     addReplyLongLong(c,dictSize(c->db->dict));
 }
 
+//LASTSAVE
+//返回最近一次 Redis 成功将数据保存到磁盘上的时间，以 UNIX 时间戳格式表示。
 void lastsaveCommand(redisClient *c) {
     addReplyLongLong(c,server.lastsave);
 }
 
+//TYPE key
+//返回 key 所储存的值的类型。
 void typeCommand(redisClient *c) {
     robj *o;
     char *type;
@@ -657,6 +710,13 @@ void typeCommand(redisClient *c) {
     addReplyStatus(c,type);
 }
 
+//SHUTDOWN [SAVE|NOSAVE]
+/*
+停止所有客户端
+如果有至少一个保存点在等待，执行 SAVE 命令
+如果 AOF 选项被打开，更新 AOF 文件
+关闭 redis 服务器(server)
+*/
 void shutdownCommand(redisClient *c) {
     int flags = 0;
 
@@ -679,12 +739,14 @@ void shutdownCommand(redisClient *c) {
      * with half-read data).
      *
      * Also when in Sentinel mode clear the SAVE flag and force NOSAVE. */
+	//如果正在加载一个数据库，不能够有save 参数
     if (server.loading || server.sentinel_mode)
         flags = (flags & ~REDIS_SHUTDOWN_SAVE) | REDIS_SHUTDOWN_NOSAVE;
     if (prepareForShutdown(flags) == REDIS_OK) exit(0);
     addReplyError(c,"Errors trying to SHUTDOWN. Check logs.");
 }
 
+//
 void renameGenericCommand(redisClient *c, int nx) {
     robj *o;
     long long expire;
