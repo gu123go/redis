@@ -198,8 +198,7 @@ int listTypeNext(listTypeIterator *li, listTypeEntry *entry) {
 }
 
 /* Return entry or NULL at the current position of the iterator. */
-//返回entry中key对应的value
-//否则返回NULL
+//返回迭代器当前的entry或者返回NULL
 robj *listTypeGet(listTypeEntry *entry) {
     listTypeIterator *li = entry->li;
     robj *value = NULL;
